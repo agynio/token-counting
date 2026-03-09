@@ -1,0 +1,5 @@
+1. Token-counting service is deployed.
+2. Check the pods status:
+   kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+3. Access the gRPC service via kubectl port-forward:
+   kubectl port-forward svc/{{ include "token-counting.fullname" . }} 9090:9090
