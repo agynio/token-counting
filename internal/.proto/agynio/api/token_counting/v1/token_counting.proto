@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package agynio.api.token_counting.v1;
+
+option go_package = "github.com/agynio/api/gen/agynio/api/token_counting/v1;token_countingv1";
+
+service TokenCountingService {
+  rpc CountTokens(CountTokensRequest) returns (CountTokensResponse);
+}
+
+enum Model {
+  MODEL_UNSPECIFIED = 0;
+  MODEL_GPT_5 = 1;
+}
+
+message CountTokensRequest {
+  Model model = 1;
+  repeated bytes messages = 2;
+}
+
+message CountTokensResponse {
+  repeated int32 tokens = 1;
+}
