@@ -10,7 +10,6 @@ BUF_TEMPLATE := ./buf.gen.yaml
 all: build
 
 proto:
-	buf export buf.build/agynio/api --output $(PROTO_DIR)
 	buf generate $(PROTO_DIR) --template $(BUF_TEMPLATE)
 
 build:
