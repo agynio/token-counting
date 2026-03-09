@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
-	token_countingv1 "github.com/agynio/token-counting/internal/.gen/agynio/api/token_counting/v1"
+	tokencountingv1 "github.com/agynio/token-counting/internal/.gen/agynio/api/token_counting/v1"
 	"github.com/agynio/token-counting/internal/config"
 	"github.com/agynio/token-counting/internal/logging"
 	"github.com/agynio/token-counting/internal/server"
@@ -47,7 +47,7 @@ func run() error {
 	}
 
 	grpcServer := grpc.NewServer()
-	token_countingv1.RegisterTokenCountingServiceServer(grpcServer, server.New(tokenizerInstance, logger))
+	tokencountingv1.RegisterTokenCountingServiceServer(grpcServer, server.New(tokenizerInstance, server.WithLogger(logger)))
 
 	listener, err := net.Listen("tcp", cfg.GRPCAddr)
 	if err != nil {

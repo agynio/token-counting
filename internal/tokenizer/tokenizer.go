@@ -38,6 +38,11 @@ type InvalidArgumentError struct {
 	err     error
 }
 
+// NewInvalidArgumentError constructs an InvalidArgumentError.
+func NewInvalidArgumentError(message string, err error) *InvalidArgumentError {
+	return &InvalidArgumentError{message: message, err: err}
+}
+
 func (e *InvalidArgumentError) Error() string {
 	if e.err == nil {
 		return e.message
@@ -53,6 +58,11 @@ func (e *InvalidArgumentError) Unwrap() error {
 type InternalError struct {
 	message string
 	err     error
+}
+
+// NewInternalError constructs an InternalError.
+func NewInternalError(message string, err error) *InternalError {
+	return &InternalError{message: message, err: err}
 }
 
 func (e *InternalError) Error() string {
@@ -72,19 +82,39 @@ type Tokenizer struct {
 	httpClient *http.Client
 }
 
+// Option configures tokenizer behavior.
+type Option func(*Tokenizer)
+
+// WithHTTPClient overrides the HTTP client used for image fetching.
+func WithHTTPClient(client *http.Client) Option {
+	return func(t *Tokenizer) {
+		if client != nil {
+			t.httpClient = client
+		}
+	}
+}
+
 // NewTokenizer constructs a Tokenizer configured with the o200k_base encoding.
-func NewTokenizer() (*Tokenizer, error) {
+func NewTokenizer(opts ...Option) (*Tokenizer, error) {
 	encoding, err := tiktoken.GetEncoding("o200k_base")
 	if err != nil {
 		return nil, fmt.Errorf("load encoding: %w", err)
 	}
 
-	return &Tokenizer{
+	tokenizer := &Tokenizer{
 		encoding: encoding,
 		httpClient: &http.Client{
 			Timeout: imageFetchTimeout,
 		},
-	}, nil
+	}
+	for _, opt := range opts {
+		opt(tokenizer)
+	}
+	if tokenizer.httpClient == nil {
+		tokenizer.httpClient = &http.Client{Timeout: imageFetchTimeout}
+	}
+
+	return tokenizer, nil
 }
 
 // CountMessageTokens parses a JSON-encoded message and returns the token count.
@@ -94,7 +124,15 @@ func (t *Tokenizer) CountMessageTokens(messageJSON []byte) (int, error) {
 		return 0, invalidArgument("invalid JSON", err)
 	}
 
-	roleTokens := t.encoding.Encode(message.Role, nil, nil)
+	role := strings.TrimSpace(message.Role)
+	if role == "" {
+		return 0, invalidArgument("role is required", nil)
+	}
+	if len(message.Content) == 0 {
+		return 0, invalidArgument("content is required", nil)
+	}
+
+	roleTokens := t.encoding.Encode(role, nil, nil)
 
 	total := 3 + len(roleTokens)
 	for _, item := range message.Content {
@@ -117,7 +155,6 @@ type messagePayload struct {
 type contentItem struct {
 	Type     string          `json:"type"`
 	Text     string          `json:"text"`
-	Detail   string          `json:"detail"`
 	ImageURL json.RawMessage `json:"image_url"`
 }
 
@@ -136,7 +173,7 @@ func (t *Tokenizer) countContentTokens(item contentItem) (int, error) {
 	case "input_file":
 		return 0, invalidArgument("unsupported content type: input_file", nil)
 	case "":
-		return 0, invalidArgument("unsupported content type: ", nil)
+		return 0, invalidArgument("content type is required", nil)
 	default:
 		return 0, invalidArgument(fmt.Sprintf("unsupported content type: %s", item.Type), nil)
 	}
@@ -159,10 +196,7 @@ func (t *Tokenizer) countImageTokens(item contentItem) (int, error) {
 		return 0, invalidArgument("image_url required", nil)
 	}
 
-	resolvedDetail := normalizeDetail(item.Detail)
-	if resolvedDetail == "" {
-		resolvedDetail = normalizeDetail(detail)
-	}
+	resolvedDetail := normalizeDetail(detail)
 	if resolvedDetail == "" || resolvedDetail == "high" || resolvedDetail == "auto" {
 		return t.countHighDetailImageTokens(imageURL)
 	}
@@ -180,11 +214,8 @@ func (t *Tokenizer) countHighDetailImageTokens(imageURL string) (int, error) {
 	}
 
 	scaledWidth, scaledHeight := scaleImageDimensions(width, height)
-	tilesWide := int(math.Ceil(scaledWidth / imageTileDimension))
-	tilesHigh := int(math.Ceil(scaledHeight / imageTileDimension))
-	if tilesWide <= 0 || tilesHigh <= 0 {
-		return 0, invalidArgument("failed to decode image", nil)
-	}
+	tilesWide := int(math.Ceil(scaledWidth / float64(imageTileDimension)))
+	tilesHigh := int(math.Ceil(scaledHeight / float64(imageTileDimension)))
 
 	tileCount := tilesWide * tilesHigh
 	return imageTokenBase + (imageTokenPerTile * tileCount), nil
@@ -220,17 +251,18 @@ func (t *Tokenizer) fetchImageDimensions(imageURL string) (int, int, error) {
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return 0, 0, internalError(fmt.Sprintf("failed to fetch image: status %d", resp.StatusCode), nil)
 	}
-
-	data, err := readLimited(resp.Body, maxImageBytes)
-	if err != nil {
-		return 0, 0, internalError("failed to fetch image", err)
+	if resp.ContentLength > maxImageBytes {
+		return 0, 0, internalError(fmt.Sprintf("failed to fetch image: body exceeds %d bytes", maxImageBytes), nil)
 	}
 
-	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	limited := io.LimitReader(resp.Body, maxImageBytes)
+	cfg, _, err := image.DecodeConfig(limited)
 	if err != nil {
 		return 0, 0, invalidArgument("failed to decode image", err)
 	}
-
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		return 0, 0, invalidArgument("failed to decode image", nil)
+	}
 	return cfg.Width, cfg.Height, nil
 }
 
@@ -244,15 +276,24 @@ func decodeDataURLDimensions(imageURL string) (int, int, error) {
 	if !strings.Contains(meta, ";base64") {
 		return 0, 0, invalidArgument("failed to decode image", nil)
 	}
+	if base64.StdEncoding.DecodedLen(len(data)) > maxImageBytes {
+		return 0, 0, invalidArgument("failed to decode image", fmt.Errorf("image exceeds %d bytes", maxImageBytes))
+	}
 
 	decoded, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
 		return 0, 0, invalidArgument("failed to decode image", err)
 	}
+	if len(decoded) > maxImageBytes {
+		return 0, 0, invalidArgument("failed to decode image", fmt.Errorf("image exceeds %d bytes", maxImageBytes))
+	}
 
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(decoded))
 	if err != nil {
 		return 0, 0, invalidArgument("failed to decode image", err)
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		return 0, 0, invalidArgument("failed to decode image", nil)
 	}
 
 	return cfg.Width, cfg.Height, nil
@@ -263,6 +304,7 @@ func parseImageURL(raw json.RawMessage) (string, string, string, error) {
 		return "", "", "", invalidArgument("image_url required", nil)
 	}
 
+	// OpenAI Responses API allows image_url as either a string URL or an object.
 	var urlValue string
 	if err := json.Unmarshal(raw, &urlValue); err == nil {
 		return urlValue, "", "", nil
@@ -298,21 +340,10 @@ func scaleImageDimensions(width, height int) (float64, float64) {
 	return w, h
 }
 
-func readLimited(reader io.Reader, limit int64) ([]byte, error) {
-	data, err := io.ReadAll(io.LimitReader(reader, limit+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > limit {
-		return nil, fmt.Errorf("image exceeds %d bytes", limit)
-	}
-	return data, nil
-}
-
 func invalidArgument(message string, err error) error {
-	return &InvalidArgumentError{message: message, err: err}
+	return NewInvalidArgumentError(message, err)
 }
 
 func internalError(message string, err error) error {
-	return &InternalError{message: message, err: err}
+	return NewInternalError(message, err)
 }

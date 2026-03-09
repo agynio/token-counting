@@ -38,6 +38,9 @@ spec:
             - name: grpc
               containerPort: {{ .Values.service.port }}
               protocol: TCP
+          env:
+            - name: GRPC_ADDR
+              value: ":{{ .Values.service.port }}"
           {{- if .Values.probes.liveness.enabled }}
           livenessProbe:
             tcpSocket:
