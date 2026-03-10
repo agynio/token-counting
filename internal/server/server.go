@@ -75,7 +75,7 @@ func validateCountTokensRequest(req *tokencountingv1.CountTokensRequest) error {
 	if req == nil {
 		return status.Error(codes.InvalidArgument, "request required")
 	}
-	if req.GetModel() == tokencountingv1.Model_MODEL_UNSPECIFIED {
+	if req.GetModel() == tokencountingv1.TokenCountingModel_TOKEN_COUNTING_MODEL_UNSPECIFIED {
 		return status.Error(codes.InvalidArgument, "model is required")
 	}
 	if len(req.GetMessages()) == 0 {

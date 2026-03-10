@@ -33,7 +33,7 @@ func TestCountTokensSuccess(t *testing.T) {
 	expectedB := countTokens(t, tokenizerInstance, messageB)
 
 	resp, err := client.CountTokens(context.Background(), &tokencountingv1.CountTokensRequest{
-		Model:    tokencountingv1.Model_MODEL_GPT_5,
+		Model:    tokencountingv1.TokenCountingModel_TOKEN_COUNTING_MODEL_GPT_5,
 		Messages: [][]byte{messageA, messageB},
 	})
 	if err != nil {
@@ -69,7 +69,7 @@ func TestCountTokensEmptyMessages(t *testing.T) {
 	defer cleanup()
 
 	_, err := client.CountTokens(context.Background(), &tokencountingv1.CountTokensRequest{
-		Model: tokencountingv1.Model_MODEL_GPT_5,
+		Model: tokencountingv1.TokenCountingModel_TOKEN_COUNTING_MODEL_GPT_5,
 	})
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -83,7 +83,7 @@ func TestCountTokensInvalidArgumentMapping(t *testing.T) {
 	defer cleanup()
 
 	_, err := client.CountTokens(context.Background(), &tokencountingv1.CountTokensRequest{
-		Model:    tokencountingv1.Model_MODEL_GPT_5,
+		Model:    tokencountingv1.TokenCountingModel_TOKEN_COUNTING_MODEL_GPT_5,
 		Messages: [][]byte{[]byte("{}")},
 	})
 	if err == nil {
@@ -99,7 +99,7 @@ func TestCountTokensInternalErrorMapping(t *testing.T) {
 	defer cleanup()
 
 	_, err := client.CountTokens(context.Background(), &tokencountingv1.CountTokensRequest{
-		Model:    tokencountingv1.Model_MODEL_GPT_5,
+		Model:    tokencountingv1.TokenCountingModel_TOKEN_COUNTING_MODEL_GPT_5,
 		Messages: [][]byte{[]byte("{}")},
 	})
 	if err == nil {
