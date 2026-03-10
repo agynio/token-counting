@@ -1,8 +1,11 @@
+# syntax=docker/dockerfile:1.8
+
 FROM golang:1.22 AS builder
 
+ARG TARGETOS
+ARG TARGETARCH
+
 ENV CGO_ENABLED=0 \
-    GOOS=linux \
-    GOARCH=amd64 \
     GOBIN=/usr/local/bin
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,7 +30,8 @@ COPY . .
 RUN buf export buf.build/agynio/api --output internal/.proto && \
     buf generate internal/.proto --template ./buf.gen.yaml
 
-RUN go build -o /out/token-counting ./cmd/token-counting
+RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath -ldflags "-s -w" -o /out/token-counting ./cmd/token-counting
 
 FROM gcr.io/distroless/static-debian12
 
