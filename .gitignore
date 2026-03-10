@@ -9,6 +9,8 @@ dist/
 
 # Generated code
 internal/.gen/
+
+# Exported protos
 internal/.proto/
 
 # Editor
