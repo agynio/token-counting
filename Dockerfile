@@ -24,7 +24,8 @@ RUN go mod download
 
 COPY . .
 
-RUN buf generate internal/.proto --template ./buf.gen.yaml
+RUN buf export buf.build/agynio/api --output internal/.proto && \
+    buf generate internal/.proto --template ./buf.gen.yaml
 
 RUN go build -o /out/token-counting ./cmd/token-counting
 
