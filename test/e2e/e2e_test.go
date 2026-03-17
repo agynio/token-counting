@@ -16,9 +16,9 @@ func TestCountTokensE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, tokenCountingAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.NewClient(tokenCountingAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		t.Fatalf("dial token-counting: %v", err)
+		t.Fatalf("create token-counting client: %v", err)
 	}
 	t.Cleanup(func() {
 		_ = conn.Close()
