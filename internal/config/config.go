@@ -7,14 +7,14 @@ import (
 )
 
 const (
-	defaultGRPCAddr = ":50051"
-	defaultLogLevel = "info"
+	defaultGRPCAddress = ":50051"
+	defaultLogLevel    = "info"
 )
 
 // Config captures runtime configuration derived from the environment.
 type Config struct {
-	GRPCAddr string
-	LogLevel string
+	GRPCAddress string
+	LogLevel    string
 }
 
 // Load reads configuration from environment variables, applying defaults when
@@ -22,7 +22,7 @@ type Config struct {
 func Load() (Config, error) {
 	var cfg Config
 
-	cfg.GRPCAddr = readEnv("GRPC_ADDR", defaultGRPCAddr)
+	cfg.GRPCAddress = readEnv("GRPC_ADDRESS", defaultGRPCAddress)
 
 	logLevel, err := parseLogLevel(readEnv("LOG_LEVEL", defaultLogLevel))
 	if err != nil {

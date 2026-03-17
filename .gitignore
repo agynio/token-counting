@@ -8,8 +8,7 @@ coverage/
 dist/
 
 # Generated code
-internal/.gen/
-internal/.proto/
+.gen/
 
 # Editor
 .DS_Store
