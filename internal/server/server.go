@@ -32,7 +32,12 @@ func (s *Server) CountTokens(ctx context.Context, req *tokencountingv1.CountToke
 		return nil, status.Errorf(codes.InvalidArgument, "messages: %v", err)
 	}
 
-	return &tokencountingv1.CountTokensResponse{Tokens: tokenizer.CountTokens(model, messages)}, nil
+	tokens, err := tokenizer.CountTokens(ctx, model, messages)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "count tokens: %v", err)
+	}
+
+	return &tokencountingv1.CountTokensResponse{Tokens: tokens}, nil
 }
 
 func parseModel(model tokencountingv1.TokenCountingModel) (tokenizer.Model, error) {
@@ -60,7 +65,11 @@ func parseMessages(raw [][]byte) ([]tokenizer.Message, error) {
 		if !json.Valid(cleaned) {
 			return nil, fmt.Errorf("message %d is not valid json", i)
 		}
-		messages[i] = tokenizer.NewMessage(cleaned)
+		msg, err := tokenizer.ParseMessage(cleaned)
+		if err != nil {
+			return nil, fmt.Errorf("message %d: %w", i, err)
+		}
+		messages[i] = msg
 	}
 
 	return messages, nil
