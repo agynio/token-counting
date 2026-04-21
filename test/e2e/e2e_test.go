@@ -41,9 +41,10 @@ func TestCountTokensE2E(t *testing.T) {
 	if len(resp.Tokens) != len(messages) {
 		t.Fatalf("expected %d tokens, got %d", len(messages), len(resp.Tokens))
 	}
+	expected := []int32{12, 4}
 	for i, token := range resp.Tokens {
-		if token <= 0 {
-			t.Fatalf("expected token count > 0 at %d, got %d", i, token)
+		if token != expected[i] {
+			t.Fatalf("expected token count %d at %d, got %d", expected[i], i, token)
 		}
 	}
 }
