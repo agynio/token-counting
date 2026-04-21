@@ -63,11 +63,12 @@ func extractPDFText(data []byte) (string, []types.Dim, error) {
 		if err != nil {
 			return "", nil, fmt.Errorf("extract page text: %w", err)
 		}
-		if strings.TrimSpace(pageText) == "" {
+		pageText = normalizeText(pageText)
+		if pageText == "" {
 			continue
 		}
 		if builder.Len() > 0 {
-			builder.WriteString("\n")
+			builder.WriteString(" ")
 		}
 		builder.WriteString(pageText)
 	}
@@ -121,6 +122,7 @@ func extractTextFromContent(content []byte) (string, error) {
 	scanner := contentScanner{data: content}
 	operands := make([]operand, 0, 4)
 	var builder strings.Builder
+	var hasText bool
 
 	for {
 		ok, err := scanner.skipWhitespace()
@@ -148,12 +150,13 @@ func extractTextFromContent(content []byte) (string, error) {
 				operands = operands[:0]
 				continue
 			}
-			text := extractTextOperand(tok.value, operands)
+			text := normalizeText(extractTextOperand(tok.value, operands))
 			if text != "" {
-				if builder.Len() > 0 {
-					builder.WriteString("\n")
+				if hasText {
+					builder.WriteString(" ")
 				}
 				builder.WriteString(text)
+				hasText = true
 			}
 			operands = operands[:0]
 		default:
@@ -162,6 +165,14 @@ func extractTextFromContent(content []byte) (string, error) {
 	}
 
 	return builder.String(), nil
+}
+
+func normalizeText(text string) string {
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return ""
+	}
+	return strings.Join(fields, " ")
 }
 
 func extractTextOperand(op string, operands []operand) string {

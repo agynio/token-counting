@@ -45,10 +45,25 @@ func (c *counter) countMessage(ctx context.Context, message Message) (int, error
 	switch item := message.Item.(type) {
 	case MessageItem:
 		return c.countMessageItem(ctx, item)
+	case *MessageItem:
+		if item == nil {
+			return 0, errors.New("message item is nil")
+		}
+		return c.countMessageItem(ctx, *item)
 	case FunctionCallItem:
 		return c.countFunctionCall(ctx, item)
+	case *FunctionCallItem:
+		if item == nil {
+			return 0, errors.New("function call item is nil")
+		}
+		return c.countFunctionCall(ctx, *item)
 	case FunctionCallOutputItem:
 		return c.countFunctionCallOutput(ctx, item)
+	case *FunctionCallOutputItem:
+		if item == nil {
+			return 0, errors.New("function call output item is nil")
+		}
+		return c.countFunctionCallOutput(ctx, *item)
 	default:
 		return 0, fmt.Errorf("unsupported message item %T", message.Item)
 	}

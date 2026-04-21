@@ -1,102 +1,62 @@
 package tokenizer
 
 import (
-	"crypto/sha1"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/pkoukk/tiktoken-go"
 )
 
-const bpeDownloadTimeout = 30 * time.Second
+const (
+	bpePathEnv     = "TOKEN_COUNTING_BPE_PATH"
+	bpeDirEnv      = "TOKEN_COUNTING_BPE_DIR"
+	bpeFileName    = "o200k_base.tiktoken"
+	defaultBpeHint = "provide a local o200k_base.tiktoken via TOKEN_COUNTING_BPE_PATH or TOKEN_COUNTING_BPE_DIR"
+)
 
 var bpeLoaderOnce sync.Once
 
 func configureBpeLoader() {
 	bpeLoaderOnce.Do(func() {
-		client := &http.Client{Timeout: bpeDownloadTimeout}
-		tiktoken.SetBpeLoader(&timeoutBpeLoader{client: client})
+		tiktoken.SetBpeLoader(&localBpeLoader{})
 	})
 }
 
-type timeoutBpeLoader struct {
-	client *http.Client
-}
+type localBpeLoader struct{}
 
-func (l *timeoutBpeLoader) LoadTiktokenBpe(path string) (map[string]int, error) {
-	contents, err := readFileCached(path, l.client)
+func (l *localBpeLoader) LoadTiktokenBpe(path string) (map[string]int, error) {
+	localPath, err := resolveBpePath(path)
 	if err != nil {
 		return nil, err
+	}
+	contents, err := os.ReadFile(localPath)
+	if err != nil {
+		return nil, fmt.Errorf("read bpe file: %w", err)
 	}
 	return parseBpeContents(contents)
 }
 
-func readFileCached(path string, client *http.Client) ([]byte, error) {
-	if strings.TrimSpace(path) == "" {
-		return nil, errors.New("bpe path cannot be empty")
+func resolveBpePath(input string) (string, error) {
+	if path := strings.TrimSpace(os.Getenv(bpePathEnv)); path != "" {
+		return path, nil
 	}
-	cacheDir := strings.TrimSpace(os.Getenv("TIKTOKEN_CACHE_DIR"))
-	if cacheDir == "" {
-		cacheDir = strings.TrimSpace(os.Getenv("DATA_GYM_CACHE_DIR"))
+	if dir := strings.TrimSpace(os.Getenv(bpeDirEnv)); dir != "" {
+		return filepath.Join(dir, bpeFileName), nil
 	}
-	if cacheDir == "" {
-		cacheDir = filepath.Join(os.TempDir(), "data-gym-cache")
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "", errors.New(defaultBpeHint)
 	}
-	cacheKey := fmt.Sprintf("%x", sha1.Sum([]byte(path)))
-	cachePath := filepath.Join(cacheDir, cacheKey)
-	if data, err := os.ReadFile(cachePath); err == nil {
-		return data, nil
-	}
-
-	data, err := readFile(path, client)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create cache dir: %w", err)
-	}
-	tmpPath := fmt.Sprintf("%s.tmp", cachePath)
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
-		return nil, fmt.Errorf("write cache file: %w", err)
-	}
-	if err := os.Rename(tmpPath, cachePath); err != nil {
-		_ = os.Remove(tmpPath)
-		return nil, fmt.Errorf("rename cache file: %w", err)
-	}
-	return data, nil
-}
-
-func readFile(path string, client *http.Client) ([]byte, error) {
-	trimmed := strings.TrimSpace(path)
 	if strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") {
-		if client == nil {
-			client = http.DefaultClient
-		}
-		resp, err := client.Get(trimmed)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("download bpe: status %s", resp.Status)
-		}
-		return io.ReadAll(resp.Body)
+		return "", errors.New(defaultBpeHint)
 	}
-	file, err := os.Open(trimmed)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-	return io.ReadAll(file)
+	return trimmed, nil
 }
 
 func parseBpeContents(contents []byte) (map[string]int, error) {

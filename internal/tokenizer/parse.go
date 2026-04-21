@@ -190,14 +190,17 @@ func parseContentPart(raw json.RawMessage) (ContentPart, error) {
 		if imageURL == "" && fileID == "" {
 			return ContentPart{}, errors.New("image content requires image_url or file_id")
 		}
+		detailValue := strings.ToLower(strings.TrimSpace(content.Detail))
 		detail := ImageDetailHigh
-		switch strings.ToLower(strings.TrimSpace(content.Detail)) {
+		switch detailValue {
 		case "":
 			// default high
+		case string(ImageDetailHigh):
+			detail = ImageDetailHigh
 		case string(ImageDetailLow):
 			detail = ImageDetailLow
 		default:
-			detail = ImageDetailHigh
+			return ContentPart{}, fmt.Errorf("unsupported image detail %q", content.Detail)
 		}
 		return ContentPart{Type: ContentTypeInputImage, Image: ImageContent{ImageURL: imageURL, FileID: fileID, Detail: detail}}, nil
 	case ContentTypeInputFile:
