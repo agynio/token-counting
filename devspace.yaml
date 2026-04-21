@@ -5,6 +5,13 @@ vars:
   E2E_IMAGE: ghcr.io/agynio/devcontainer-go:1
 
 functions:
+  ensure_bpe: |-
+    if [ ! -f encodings/o200k_base.tiktoken ]; then
+      echo "Downloading o200k_base.tiktoken..."
+      mkdir -p encodings
+      curl -sSL https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken \
+        -o encodings/o200k_base.tiktoken
+    fi
   disable_argocd_sync: |-
     if kubectl get application token-counting -n argocd >/dev/null 2>&1; then
       echo "Disabling ArgoCD auto-sync for token-counting..."
@@ -52,6 +59,11 @@ functions:
                     sleep 1; elapsed=$((elapsed + 1))
                     [ "$elapsed" -ge 120 ] && { echo "ERROR: sync timeout" >&2; exit 1; }
                   done
+                  export TOKEN_COUNTING_BPE_PATH=/opt/app/data/encodings/o200k_base.tiktoken
+                  if [ ! -f "$TOKEN_COUNTING_BPE_PATH" ]; then
+                    echo "ERROR: missing $TOKEN_COUNTING_BPE_PATH" >&2
+                    exit 1
+                  fi
                   buf generate buf.build/agynio/api --path agynio/api/token_counting/v1
                   exec go run ./cmd/token-counting
               volumeMounts:
@@ -104,6 +116,7 @@ pipelines:
         short: w
         description: "Keep DevSpace running and stream logs"
     run: |-
+      ensure_bpe
       disable_argocd_sync
       patch_deployment
       if [ "$(get_flag "watch")" == "true" ]; then
@@ -129,6 +142,7 @@ pipelines:
 
   test:e2e:
     run: |-
+      ensure_bpe
       create_deployments e2e-runner
       start_dev e2e-runner &
       sleep 5
