@@ -47,8 +47,8 @@ COPY --from=build /out/encodings/o200k_base.tiktoken /app/encodings/o200k_base.t
 
 ENV TOKEN_COUNTING_BPE_PATH=/app/encodings/o200k_base.tiktoken
 
-RUN addgroup -S app && adduser -S app -G app
+RUN addgroup -g 10001 -S app && adduser -u 10001 -S app -G app
 
-USER app
+USER 10001
 
 ENTRYPOINT ["/app/token-counting"]
